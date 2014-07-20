@@ -11,6 +11,7 @@ output:
 ```{r load_data}
 activity_df <- read.csv(unz("activity.zip","activity.csv"))
 activity_df$date <- as.Date(activity_df$date)
+activity_df$weekday <- weekdays(activity_df$date)
 ```
 
 ## What is mean total number of steps taken per day?
@@ -53,11 +54,19 @@ num_nas <- sum(is.na(activity_df$steps))
 ```
 There are a total of `r num_nas` NA's in the dataset.
 
-Use the average number of steps from each time interval to fill in NA's
+Use the average number of steps from each time interval from the same weekday to fill in NA's
 ```{r impute_nas}
 na_inicies <- which(is.na(activity_df$steps))
 na_steps_df <- activity_df[na_inicies,]
-impute_vals <- left_join(x = na_steps_df, y = interval_mean)
+
+weekday_interval_df <- activity_df %>%
+                  group_by(weekday, interval) %>%
+                  summarise(mean_steps = mean(steps, na.rm = TRUE))
+
+impute_vals <- left_join(x = na_steps_df,
+                         y = weekday_interval_df,
+                         by = c("weekday", "interval"))
+
 steps_no_na <- activity_df$steps
 steps_no_na[na_inicies] <- impute_vals$mean_steps
 activity_df_clean <- activity_df
@@ -81,10 +90,13 @@ The **new mean** number of steps per day is: `r mean_steps_clean`
 
 The **new median** number of steps per day is: `r median_steps_clean`
 
+The mean number of steps per day ignoring NA's was **`r mean_steps`** while the mean number of steps after filling in the NA's is **`r mean_steps_clean`**
+
+This could mean that when ignoring the NA values we are possibly biasing our results. Therefore we should be smart about the way in which we handle missing data. For this example I felt it was appropriate to fill in the missing steps with the average from the same interval and same day of the week. I did not think that it would be fair to average all values from the same interval since, as we will see in the next section, there could be different activity patterens depending on the day of week.
+
 ## Are there differences in activity patterns between weekdays and weekends?
 
 ```{r weekday_vs_weekend}
-activity_df_clean$weekday <- weekdays(activity_df_clean$date)
 activity_df_clean$day_category <- ifelse(activity_df_clean$weekday %in% c("Saturday","Sunday"),"Weekend", "Weekday")
 
 weekday_interval <- activity_df_clean %>%
@@ -95,9 +107,16 @@ ggplot(weekday_interval, aes(x = interval, y = mean_steps)) +
       geom_line() +
       facet_grid(day_category~.)
 
+compare <- weekday_interval %>%
+                  group_by(day_category) %>%
+                  summarise(mean_steps = mean(mean_steps))
+mean_weekday <- compare$mean_steps[compare$day_category=="Weekday"]
+mean_weekend <- compare$mean_steps[compare$day_category=="Weekend"]
+print(compare)
+
 ```
 
-
+Examing the plots above show that for this person most of their activity happends early morning on weekdays, then drops down for pretty much the rest of the day. While on weekends, the activity seems to start a bit later (perhaps they enjoy sleeping in :) ) but the activity throughout the day is on average at a higher level. Infact, the average steps per 5 min interval on the weekdays is `r mean_weekday` steps vs. `r mean_weekend` steps on the weekend.
 
 
 
